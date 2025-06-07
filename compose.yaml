@@ -1,0 +1,87 @@
+# This Docker Compose file defines the services needed to run the Job Application AI Backend.
+# It uses FastAPI BackgroundTasks for processing and stores all files (user uploads and
+# system templates) directly in the PostgreSQL database.
+# Services include: PostgreSQL database, FastAPI application, and a one-off service
+# for running database migrations.
+
+version: "3.8"
+
+services:
+  # --- Database Service (PostgreSQL) ---
+  db:
+    image: postgres:15-alpine
+    container_name: job_app_db
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password}
+      POSTGRES_DB: ${POSTGRES_DB:-jobapp_db}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5433:5432" # Host_Port:Container_Port (Adjust 5433 if needed)
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+  # --- Application Build Definition ---
+  # Defines the Docker image for the Python application code.
+  # This build is referenced by the 'app' and 'migration' services.
+  app_build:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    # This service doesn't run a container itself; it only builds an image.
+
+  # --- Migration Service ---
+  # Runs Alembic migrations to set up or update the database schema.
+  migration:
+    image: ${COMPOSE_PROJECT_NAME:-job-application-backend}-app_build
+    container_name: job_app_migration
+    env_file:
+      - .env
+    environment:
+      # This URL uses the service name 'db' to connect to the PostgreSQL container.
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-user}:${POSTGRES_PASSWORD:-password}@db:5432/${POSTGRES_DB:-jobapp_db}
+      # SECRET_KEY_FOR_AUTH is needed for Pydantic settings to load correctly.
+      SECRET_KEY_FOR_AUTH: ${SECRET_KEY_FOR_AUTH}
+    depends_on:
+      db:
+        condition: service_healthy # Ensure DB is fully ready before migrating.
+    command: ["alembic", "upgrade", "head"]
+
+  # --- FastAPI Application Service ---
+  # This is the main service that runs the API and handles background tasks.
+  app:
+    image: ${COMPOSE_PROJECT_NAME:-job-application-backend}-app_build
+    container_name: job_app_fastapi
+    env_file:
+      - .env
+    environment:
+      # This URL uses the service name 'db' to connect to the PostgreSQL container.
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-user}:${POSTGRES_PASSWORD:-password}@db:5432/${POSTGRES_DB:-jobapp_db}
+
+      # Environment variables needed by the application (non-storage related).
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY}
+      SECRET_KEY_FOR_AUTH: ${SECRET_KEY_FOR_AUTH}
+      # MinIO/S3 variables have been removed as they are no longer used.
+
+    ports:
+      - "8000:8000" # Host_Port:Container_Port
+
+    depends_on:
+      db:
+        condition: service_healthy # App must wait for the database to be healthy.
+      migration:
+        condition: service_completed_successfully # App must wait for migrations to finish successfully.
+
+    command:
+      ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000"]
+
+# --- Volumes ---
+# Defines the persistent storage for the database.
+volumes:
+  postgres_data:
