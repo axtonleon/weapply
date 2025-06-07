@@ -16,6 +16,7 @@ app = FastAPI(
     title="Job Application AI Backend",
     description="Backend API for AI-powered job application assistance",
     version="0.1.0",
+    
 )
 
 # Add CORS middleware

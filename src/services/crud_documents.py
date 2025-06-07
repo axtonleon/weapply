@@ -5,6 +5,8 @@ from typing import List, Optional
 
 from src.db.models import User, Resume, JobDescription, GeneratedDocument
 from src.schemas.job_description import JobDescriptionCreate
+from src.services.pdf_generator import create_pdf_from_text
+from src.storage.db_binary import upload_file_to_db
 
 # --- Reusable Getters with Permission Checks ---
 
@@ -89,3 +91,66 @@ def create_generated_document_for_task(
     db.commit()
     db.refresh(db_generated_doc)
     return db_generated_doc
+
+def update_generated_document_content(
+    db: Session,
+    doc_id: int,
+    user: User,
+    new_content: str
+) -> Optional[GeneratedDocument]:
+    """Updates a generated document's content and regenerates its PDF.
+    
+    Args:
+        db: Database session
+        doc_id: ID of the document to update
+        user: User making the update
+        new_content: New text content for the document
+        
+    Returns:
+        Updated GeneratedDocument if successful, None if document not found
+        
+    Raises:
+        ValueError: If the document is not in a state that can be updated
+    """
+    doc = get_generated_document_by_id(db, doc_id, user)
+    if not doc:
+        return None
+        
+    # Only allow updates to completed documents
+    if doc.status != "completed":
+        raise ValueError("Can only update completed documents")
+        
+    try:
+        # Update the text content
+        doc.content = new_content
+        
+        # Generate new PDF
+        pdf_bytes = create_pdf_from_text(new_content)
+        if pdf_bytes:
+            # Create a new filename for the updated PDF
+            pdf_filename = f"{doc.type}_{doc.id}_{user.id}_updated.pdf"
+            
+            # Create new file record first
+            db_file_record = upload_file_to_db(
+                db=db,
+                file_content=pdf_bytes,
+                filename=pdf_filename,
+                content_type="application/pdf",
+                uploader=user
+            )
+            
+            # Update the document's file relationship
+            old_file = doc.file
+            doc.file = db_file_record
+            
+            # Now we can safely delete the old file
+            if old_file:
+                db.delete(old_file)
+            
+        db.commit()
+        db.refresh(doc)
+        return doc
+        
+    except Exception as e:
+        db.rollback()
+        raise ValueError(f"Failed to update document: {str(e)}")

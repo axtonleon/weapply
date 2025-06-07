@@ -10,7 +10,7 @@ from src.db.models import User, FileRecord
 from src.security.dependencies import get_current_user
 from src.schemas.resume import ResumeResponse
 from src.schemas.job_description import JobDescriptionCreate, JobDescriptionResponse
-from src.schemas.generated_document import GeneratedDocumentResponse
+from src.schemas.generated_document import GeneratedDocumentResponse, GeneratedDocumentUpdate
 from src.storage.db_binary import upload_file_to_db # Keep this for direct file uploads
 from src.services.ai.processing import (
     extract_resume_text_bg_task, resume_rewrite_bg_task, cover_letter_bg_task,
@@ -184,8 +184,58 @@ def download_generated_document_endpoint(doc_id: int, current_user: User = Depen
         media_type=doc.file.content_type,
         headers={"Content-Disposition": f"attachment; filename=\"{doc.file.filename}\""}
     )
+
+@router.patch("/generated/{doc_id}/content", response_model=GeneratedDocumentResponse)
+def update_generated_document_content_endpoint(
+    doc_id: int,
+    update_data: GeneratedDocumentUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Updates the content of a generated document and regenerates its PDF.
     
+    This endpoint allows users to modify the AI-generated content and automatically
+    regenerates the PDF version of the document.
     
+    Args:
+        doc_id: ID of the document to update
+        update_data: New content for the document
+        current_user: Current authenticated user
+        db: Database session
+        
+    Returns:
+        Updated GeneratedDocument
+        
+    Raises:
+        HTTPException: If document not found or update fails
+    """
+    try:
+        updated_doc = crud_documents.update_generated_document_content(
+            db=db,
+            doc_id=doc_id,
+            user=current_user,
+            new_content=update_data.content
+        )
+        
+        if not updated_doc:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Generated document not found."
+            )
+            
+        return updated_doc
+        
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to update document: {str(e)}"
+        )
+
 # @router.post(
 #     "/process/generate-with-sample/",
 #     response_model=GeneratedDocumentResponse,

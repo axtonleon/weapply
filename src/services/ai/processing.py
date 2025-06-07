@@ -270,8 +270,6 @@ Generate a new resume by tailoring the user's resume content to the provided Job
         logger.error(f"Unexpected error during resume generation: {e}", exc_info=True)
         raise DocumentProcessingError(f"Resume generation failed: {str(e)}")
 
-# --- Keep existing functions for their specific purposes ---
-# Modify them to accept text directly, not IDs
 
 def process_resume_rewrite(resume_text: str) -> Optional[str]:
     """Process a resume rewrite task.

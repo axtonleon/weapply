@@ -36,3 +36,9 @@ class GenerationType(str, Enum):
     REWRITE_WITH_SAMPLE = "rewrite_with_sample"       # General rewrite following sample format
     TAILOR_WITH_SAMPLE = "tailor_with_sample"         # Tailored to JD following sample format
 
+# Schema for updating generated document content
+class GeneratedDocumentUpdate(BaseModel):
+    content: str
+    
+    model_config = ConfigDict(from_attributes=True)
+
