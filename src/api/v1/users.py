@@ -49,7 +49,9 @@ def create_user(
     # Create a new User model instance
     new_user = User(
         email=user.email,
-        password_hash=hashed_password
+        password_hash=hashed_password,
+        first_name=user.first_name,
+        last_name=user.last_name
     )
 
     # Add the new user to the database session, commit, and refresh

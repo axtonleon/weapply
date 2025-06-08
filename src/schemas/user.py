@@ -6,18 +6,22 @@ from datetime import datetime
 # Base schema for user, reusable
 class UserBase(BaseModel):
     email: EmailStr # Pydantic validates this as an email format
+    
 
 # Schema for creating a user (used in POST requests)
 class UserCreate(UserBase):
     password: str # Password is required for creation
+    first_name: str
+    last_name: str 
 
 # Schema for returning user data (excluding password_hash)
 class UserResponse(UserBase):
     id: int # Include the database ID
     created_at: datetime # Include the creation timestamp
+    first_name: str 
+    last_name: str 
 
-    # Pydantic v2 and later setting for ORM compatibility
-    # Allows Pydantic models to be created from SQLAlchemy model instances
+
     model_config = ConfigDict(from_attributes=True)
 
 
